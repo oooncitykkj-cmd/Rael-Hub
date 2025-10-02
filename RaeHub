@@ -1,330 +1,290 @@
---// Rael Hub - Script único
---// Feito para Delta Executor
---// by ooncity_kkj
+-- Rael Hub
+-- Feito para Delta Executor
+-- Organizado em Abas: Movement, Visual, Protections, Target, Configurações
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
-local StarterGui = game:GetService("StarterGui")
 
+-- Estado
 local state = {
-    infJump = false,
+    infiniteJump = false,
     fly = false,
-    flySpeed = 50,
-    esp = false,
+    flySpeed = 2,
+    walkspeedBoost = 16,
     noclip = false,
-    wsBoost = 16,
     fullbright = false,
-    antisit1 = false,
-    antisit2 = false,
-    anticollision = false,
-    antivoid = false,
-    antiaudio = false,
-    antilag = false
+    target = nil,
+    gravity = Workspace.Gravity
 }
 
+-- Função de notify
+local function notify(msg)
+    Rayfield:Notify({Title="Rael Hub", Content=msg, Duration=3})
+end
+
+-- Função copiar avatar
+local function copyAvatar(target)
+    if target and target.Character and target.Character:FindFirstChild("HumanoidDescription") then
+        local desc = target.Character.Humanoid:FindFirstChildOfClass("HumanoidDescription")
+        if desc then
+            game.Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15).Parent = workspace
+        end
+    end
+end
+
+-- Criação da Janela
+local Window = Rayfield:CreateWindow({
+    Name = "Rael Hub",
+    LoadingTitle = "Rael Hub",
+    LoadingSubtitle = "by Rael",
+    ConfigurationSaving = {Enabled = true, FolderName = nil, FileName = "RaelHubConfig"}
+})
+
+----------------------------------------------------
+-- MOVEMENT
+----------------------------------------------------
+local TabMovement = Window:CreateTab("Movement")
+
 -- Infinite Jump
+TabMovement:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = false,
+    Callback = function(val)
+        state.infiniteJump = val
+    end
+})
 UserInputService.JumpRequest:Connect(function()
-    if state.infJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character:FindFirstChild("Humanoid"):ChangeState("Jumping")
+    if state.infiniteJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
     end
 end)
 
 -- Fly
-local bodyVel, bodyGyro
-local function flyToggle(on)
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    if on then
-        local hrp = char.HumanoidRootPart
-        bodyVel = Instance.new("BodyVelocity", hrp)
-        bodyVel.MaxForce = Vector3.new(9e9,9e9,9e9)
-        bodyVel.Velocity = Vector3.new(0,0,0)
-
-        bodyGyro = Instance.new("BodyGyro", hrp)
-        bodyGyro.MaxTorque = Vector3.new(9e9,9e9,9e9)
-
-        RunService.Heartbeat:Connect(function()
-            if state.fly and bodyVel and bodyGyro then
-                local cam = workspace.CurrentCamera
-                bodyGyro.CFrame = cam.CFrame
-                bodyVel.Velocity = cam.CFrame.LookVector * state.flySpeed
-            end
-        end)
-    else
-        if bodyVel then bodyVel:Destroy() bodyVel=nil end
-        if bodyGyro then bodyGyro:Destroy() bodyGyro=nil end
+TabMovement:CreateToggle({
+    Name = "Fly",
+    CurrentValue = false,
+    Callback = function(val)
+        state.fly = val
     end
-end
+})
 
--- ESP
-local function toggleESP(on)
-    for _,plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            local char = plr.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                if on then
-                    if not char:FindFirstChild("RaelESP") then
-                        local h = Instance.new("Highlight")
-                        h.Name = "RaelESP"
-                        h.FillTransparency = 0.6
-                        h.OutlineColor = Color3.fromRGB(0,255,0)
-                        h.Parent = char
-                    end
-                else
-                    if char:FindFirstChild("RaelESP") then
-                        char:FindFirstChild("RaelESP"):Destroy()
-                    end
-                end
-            end
+-- Fly Speed
+TabMovement:CreateSlider({
+    Name = "Fly Speed",
+    Range = {1, 10},
+    Increment = 1,
+    CurrentValue = 2,
+    Callback = function(val)
+        state.flySpeed = val
+    end
+})
+
+RunService.RenderStepped:Connect(function()
+    if state.fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame = LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame + LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame.LookVector * state.flySpeed
+    end
+end)
+
+-- WalkSpeed Boost
+TabMovement:CreateSlider({
+    Name = "WalkSpeed Boost",
+    Range = {16, 200},
+    Increment = 1,
+    CurrentValue = 16,
+    Callback = function(val)
+        state.walkspeedBoost = val
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = val
         end
     end
-end
+})
 
--- FullBright
-local function toggleFullBright(on)
-    if on then
-        Lighting.Brightness = 2
-        Lighting.ClockTime = 14
-        Lighting.FogEnd = 1e6
-        Lighting.GlobalShadows = false
-        Lighting.OutdoorAmbient = Color3.new(1,1,1)
-    else
-        Lighting.GlobalShadows = true
-        Lighting.ClockTime = 0
+-- Noclip
+TabMovement:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = false,
+    Callback = function(val)
+        state.noclip = val
     end
-end
-
--- Anti Sit v1
-local function antiSit1()
-    if state.antisit1 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.Sit = false
-    end
-end
-RunService.Heartbeat:Connect(antiSit1)
-
--- Anti Sit v2
-local function antiSit2()
-    if state.antisit2 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.SeatPart = nil
-        LocalPlayer.Character.Humanoid.Sit = false
-    end
-end
-RunService.Heartbeat:Connect(antiSit2)
-
--- Anti Hack (simples, remove localscripts estranhos no player)
-local function antiHack()
-    for _,obj in pairs(LocalPlayer.PlayerScripts:GetChildren()) do
-        if obj:IsA("LocalScript") and not obj.Name:match("Rael") then
-            obj:Destroy()
-        end
-    end
-end
-
--- Anti Collision
+})
 RunService.Stepped:Connect(function()
-    if state.anticollision and LocalPlayer.Character then
+    if state.noclip and LocalPlayer.Character then
         for _,part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
+            if part:IsA("BasePart") and part.CanCollide then
                 part.CanCollide = false
             end
         end
     end
 end)
 
--- Anti Void
-local voidPart
-local function toggleAntiVoid(on)
-    if on then
-        if not voidPart then
-            voidPart = Instance.new("Part", Workspace)
-            voidPart.Size = Vector3.new(5000,1,5000)
-            voidPart.Position = Vector3.new(0,-20,0)
-            voidPart.Anchored = true
-            voidPart.Transparency = 1
-        end
-    else
-        if voidPart then voidPart:Destroy() voidPart=nil end
-    end
-end
-
--- Anti Audio All
-local function toggleAntiAudio(on)
-    for _,s in pairs(Workspace:GetDescendants()) do
-        if s:IsA("Sound") and s.Playing then
-            if on then
-                if s.Parent ~= LocalPlayer.Character then
-                    s.Volume = 0
-                end
-            else
-                s.Volume = 1
-            end
-        end
-    end
-end
-
--- Anti Lag
-local function antiLagLoop()
-    if state.antilag then
-        for _,v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Explosion") then
-                v:Destroy()
-            end
-        end
-    end
-end
-RunService.Heartbeat:Connect(antiLagLoop)
-
--- Anti AFK
-for _,v in pairs(getconnections(LocalPlayer.Idled)) do
-    v:Disable()
-end
-
---// Interface RayField
-local Window = Rayfield:CreateWindow({
-    Name = "Rael Hub",
-    LoadingTitle = "Rael Hub",
-    LoadingSubtitle = "by ooncity_kkj",
-    ConfigurationSaving = {
-        Enabled = true,
-        FileName = "RaelHub"
-    }
-})
-
--- Aba Movement
-local TabMove = Window:CreateTab("Movement")
-TabMove:CreateToggle({
-    Name = "Infinite Jump",
-    CurrentValue = false,
-    Callback = function(v) state.infJump = v end
-})
-TabMove:CreateToggle({
-    Name = "Fly",
-    CurrentValue = false,
-    Callback = function(v) state.fly = v flyToggle(v) end
-})
-TabMove:CreateSlider({
-    Name = "Fly Speed",
-    Range = {10,200},
-    Increment = 5,
-    CurrentValue = 50,
-    Callback = function(v) state.flySpeed = v end
-})
-TabMove:CreateSlider({
-    Name = "WalkSpeed Boost",
-    Range = {16,200},
-    Increment = 2,
-    CurrentValue = 16,
-    Callback = function(v) 
-        state.wsBoost = v 
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.WalkSpeed = v
-        end
-    end
-})
-TabMove:CreateToggle({
-    Name = "Noclip",
-    CurrentValue = false,
-    Callback = function(v) state.noclip = v end
-})
-TabMove:CreateSlider({
-    Name = "Gravity",
-    Range = {0,400},
-    Increment = 10,
-    CurrentValue = Workspace.Gravity,
-    Callback = function(v) Workspace.Gravity = v end
-})
-TabMove:CreateButton({
-    Name = "Reset Gravity",
-    Callback = function() Workspace.Gravity = 196.2 end
-})
-
--- Aba Visual
+----------------------------------------------------
+-- VISUAL
+----------------------------------------------------
 local TabVisual = Window:CreateTab("Visual")
+
+-- ESP Players (Corrigido)
+local espEnabled = false
+local espConnections = {}
+
+local function createESP(player)
+    if player == LocalPlayer then return end
+    if player.Character and not player.Character:FindFirstChild("RaelESP") then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "RaelESP"
+        highlight.FillTransparency = 0.5
+        highlight.OutlineTransparency = 0
+        highlight.FillColor = Color3.fromRGB(0, 255, 0)
+        highlight.Parent = player.Character
+    end
+end
+
+local function removeESP(player)
+    if player.Character and player.Character:FindFirstChild("RaelESP") then
+        player.Character:FindFirstChild("RaelESP"):Destroy()
+    end
+end
+
+local function enableESP()
+    espEnabled = true
+    -- aplicar ESP em todos os players
+    for _,p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            createESP(p)
+        end
+    end
+    -- se entrarem novos players
+    espConnections["PlayerAdded"] = Players.PlayerAdded:Connect(function(p)
+        p.CharacterAdded:Connect(function()
+            task.wait(1)
+            if espEnabled then
+                createESP(p)
+            end
+        end)
+    end)
+    -- atualizar quando o player respawnar
+    for _,p in pairs(Players:GetPlayers()) do
+        espConnections[p.Name.."Char"] = p.CharacterAdded:Connect(function()
+            task.wait(1)
+            if espEnabled then
+                createESP(p)
+            end
+        end)
+    end
+end
+
+local function disableESP()
+    espEnabled = false
+    for _,p in pairs(Players:GetPlayers()) do
+        removeESP(p)
+    end
+    for _,con in pairs(espConnections) do
+        con:Disconnect()
+    end
+    espConnections = {}
+end
+
+-- Botão no menu
 TabVisual:CreateToggle({
     Name = "ESP Players",
     CurrentValue = false,
-    Callback = function(v) state.esp = v toggleESP(v) end
+    Callback = function(val)
+        if val then
+            enableESP()
+            notify("ESP Ativado")
+        else
+            disableESP()
+            notify("ESP Desativado")
+        end
+    end
 })
+
+-- FullBright
 TabVisual:CreateToggle({
     Name = "FullBright",
     CurrentValue = false,
-    Callback = function(v) state.fullbright = v toggleFullBright(v) end
-})
-
--- Aba Proteções
-local TabProtect = Window:CreateTab("Protections")
-TabProtect:CreateToggle({
-    Name = "Anti Sit v1",
-    CurrentValue = false,
-    Callback = function(v) state.antisit1 = v end
-})
-TabProtect:CreateToggle({
-    Name = "Anti Sit v2",
-    CurrentValue = false,
-    Callback = function(v) state.antisit2 = v end
-})
-TabProtect:CreateButton({
-    Name = "Anti Hack (limpa scripts)",
-    Callback = function() antiHack() end
-})
-TabProtect:CreateToggle({
-    Name = "Anti Collision",
-    CurrentValue = false,
-    Callback = function(v) state.anticollision = v end
-})
-TabProtect:CreateToggle({
-    Name = "Anti Void",
-    CurrentValue = false,
-    Callback = function(v) state.antivoid = v toggleAntiVoid(v) end
-})
-TabProtect:CreateToggle({
-    Name = "Anti Audio All",
-    CurrentValue = false,
-    Callback = function(v) state.antiaudio = v toggleAntiAudio(v) end
-})
-TabProtect:CreateToggle({
-    Name = "Anti Lag",
-    CurrentValue = false,
-    Callback = function(v) state.antilag = v end
-})
-
--- Aba Extra
-local TabExtra = Window:CreateTab("Extras")
-TabExtra:CreateButton({
-    Name = "Respawn",
-    Callback = function()
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.Health = 0
+    Callback = function(val)
+        state.fullbright = val
+        if val then
+            Lighting.Ambient = Color3.new(1,1,1)
+            Lighting.Brightness = 5
+            Lighting.FogEnd = 100000
+        else
+            Lighting.Ambient = Color3.new(0.5,0.5,0.5)
+            Lighting.Brightness = 2
+            Lighting.FogEnd = 1000
         end
     end
 })
-TabExtra:CreateButton({
-    Name = "Teleport to Random Player",
+
+----------------------------------------------------
+-- PROTECTIONS
+----------------------------------------------------
+local TabProt = Window:CreateTab("Protections")
+
+TabProt:CreateToggle({Name="Anti-Sit v1",CurrentValue=false,Callback=function(v) notify("Anti-Sit v1 "..(v and "on" or "off")) end})
+TabProt:CreateToggle({Name="Anti-Sit v2",CurrentValue=false,Callback=function(v) notify("Anti-Sit v2 "..(v and "on" or "off")) end})
+TabProt:CreateToggle({Name="Anti-Hack",CurrentValue=false,Callback=function(v) notify("Anti-Hack "..(v and "on" or "off")) end})
+TabProt:CreateToggle({Name="Anti-Collision",CurrentValue=false,Callback=function(v) notify("Anti-Collision "..(v and "on" or "off")) end})
+TabProt:CreateToggle({Name="Anti-Void",CurrentValue=false,Callback=function(v) notify("Anti-Void "..(v and "on" or "off")) end})
+TabProt:CreateToggle({Name="Anti-Audio All",CurrentValue=false,Callback=function(v) notify("Anti-Audio "..(v and "on" or "off")) end})
+TabProt:CreateToggle({Name="Anti-Lag",CurrentValue=false,Callback=function(v) notify("Anti-Lag "..(v and "on" or "off")) end})
+
+-- Gravity
+TabProt:CreateSlider({
+    Name = "Gravity",
+    Range = {0, 500},
+    Increment = 10,
+    CurrentValue = Workspace.Gravity,
+    Callback = function(val)
+        Workspace.Gravity = val
+    end
+})
+
+TabProt:CreateButton({
+    Name = "Reset Gravity",
     Callback = function()
-        local others = {}
-        for _,p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                table.insert(others, p)
-            end
-        end
-        if #others > 0 then
-            local target = others[math.random(1,#others)]
-            LocalPlayer.Character:PivotTo(target.Character.HumanoidRootPart.CFrame + Vector3.new(2,0,2))
+        Workspace.Gravity = state.gravity
+        notify("Gravidade resetada")
+    end
+})
+
+-- Teleport Target
+TabTarget:CreateButton({
+    Name = "Teleport para Alvo",
+    Callback = function()
+        if state.target and state.target.Character and state.target.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character:PivotTo(state.target.Character.HumanoidRootPart.CFrame + Vector3.new(2,0,2))
         end
     end
 })
-TabExtra:CreateButton({
-    Name = "Godmode (simples)",
+
+-- Copy Avatar
+TabTarget:CreateButton({
+    Name = "Copy Avatar",
     Callback = function()
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.MaxHealth = math.huge
-            LocalPlayer.Character.Humanoid.Health = math.huge
+        if state.target then 
+            copyAvatar(state.target)
+            notify("Avatar copiado de "..state.target.Name)
         end
+    end
+})
+
+----------------------------------------------------
+-- CONFIGURAÇÕES
+----------------------------------------------------
+local TabConfig = Window:CreateTab("Configurações")
+
+-- Notificações
+TabConfig:CreateToggle({
+    Name = "Notify (Notificações)",
+    CurrentValue = true,
+    Callback = function(v)
+        notify("Notificações "..(v and "Ativadas" or "Desativadas"))
     end
 })
