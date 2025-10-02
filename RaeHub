@@ -8,6 +8,9 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
 
 local state = {
     infJump = false,
@@ -16,7 +19,13 @@ local state = {
     esp = false,
     noclip = false,
     wsBoost = 16,
-    fullbright = false
+    fullbright = false,
+    antisit1 = false,
+    antisit2 = false,
+    anticollision = false,
+    antivoid = false,
+    antiaudio = false,
+    antilag = false
 }
 
 -- Infinite Jump
@@ -77,19 +86,7 @@ local function toggleESP(on)
     end
 end
 
--- Noclip
-RunService.Stepped:Connect(function()
-    if state.noclip and LocalPlayer.Character then
-        for _,part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
-end)
-
 -- FullBright
-local Lighting = game:GetService("Lighting")
 local function toggleFullBright(on)
     if on then
         Lighting.Brightness = 2
@@ -99,9 +96,89 @@ local function toggleFullBright(on)
         Lighting.OutdoorAmbient = Color3.new(1,1,1)
     else
         Lighting.GlobalShadows = true
-        Lighting.ClockTime = 0 -- volta padrão (noite)
+        Lighting.ClockTime = 0
     end
 end
+
+-- Anti Sit v1
+local function antiSit1()
+    if state.antisit1 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.Sit = false
+    end
+end
+RunService.Heartbeat:Connect(antiSit1)
+
+-- Anti Sit v2
+local function antiSit2()
+    if state.antisit2 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.SeatPart = nil
+        LocalPlayer.Character.Humanoid.Sit = false
+    end
+end
+RunService.Heartbeat:Connect(antiSit2)
+
+-- Anti Hack (simples, remove localscripts estranhos no player)
+local function antiHack()
+    for _,obj in pairs(LocalPlayer.PlayerScripts:GetChildren()) do
+        if obj:IsA("LocalScript") and not obj.Name:match("Rael") then
+            obj:Destroy()
+        end
+    end
+end
+
+-- Anti Collision
+RunService.Stepped:Connect(function()
+    if state.anticollision and LocalPlayer.Character then
+        for _,part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- Anti Void
+local voidPart
+local function toggleAntiVoid(on)
+    if on then
+        if not voidPart then
+            voidPart = Instance.new("Part", Workspace)
+            voidPart.Size = Vector3.new(5000,1,5000)
+            voidPart.Position = Vector3.new(0,-20,0)
+            voidPart.Anchored = true
+            voidPart.Transparency = 1
+        end
+    else
+        if voidPart then voidPart:Destroy() voidPart=nil end
+    end
+end
+
+-- Anti Audio All
+local function toggleAntiAudio(on)
+    for _,s in pairs(Workspace:GetDescendants()) do
+        if s:IsA("Sound") and s.Playing then
+            if on then
+                if s.Parent ~= LocalPlayer.Character then
+                    s.Volume = 0
+                end
+            else
+                s.Volume = 1
+            end
+        end
+    end
+end
+
+-- Anti Lag
+local function antiLagLoop()
+    if state.antilag then
+        for _,v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Explosion") then
+                v:Destroy()
+            end
+        end
+    end
+end
+RunService.Heartbeat:Connect(antiLagLoop)
 
 -- Anti AFK
 for _,v in pairs(getconnections(LocalPlayer.Idled)) do
@@ -155,6 +232,17 @@ TabMove:CreateToggle({
     CurrentValue = false,
     Callback = function(v) state.noclip = v end
 })
+TabMove:CreateSlider({
+    Name = "Gravity",
+    Range = {0,400},
+    Increment = 10,
+    CurrentValue = Workspace.Gravity,
+    Callback = function(v) Workspace.Gravity = v end
+})
+TabMove:CreateButton({
+    Name = "Reset Gravity",
+    Callback = function() Workspace.Gravity = 196.2 end
+})
 
 -- Aba Visual
 local TabVisual = Window:CreateTab("Visual")
@@ -167,6 +255,43 @@ TabVisual:CreateToggle({
     Name = "FullBright",
     CurrentValue = false,
     Callback = function(v) state.fullbright = v toggleFullBright(v) end
+})
+
+-- Aba Proteções
+local TabProtect = Window:CreateTab("Protections")
+TabProtect:CreateToggle({
+    Name = "Anti Sit v1",
+    CurrentValue = false,
+    Callback = function(v) state.antisit1 = v end
+})
+TabProtect:CreateToggle({
+    Name = "Anti Sit v2",
+    CurrentValue = false,
+    Callback = function(v) state.antisit2 = v end
+})
+TabProtect:CreateButton({
+    Name = "Anti Hack (limpa scripts)",
+    Callback = function() antiHack() end
+})
+TabProtect:CreateToggle({
+    Name = "Anti Collision",
+    CurrentValue = false,
+    Callback = function(v) state.anticollision = v end
+})
+TabProtect:CreateToggle({
+    Name = "Anti Void",
+    CurrentValue = false,
+    Callback = function(v) state.antivoid = v toggleAntiVoid(v) end
+})
+TabProtect:CreateToggle({
+    Name = "Anti Audio All",
+    CurrentValue = false,
+    Callback = function(v) state.antiaudio = v toggleAntiAudio(v) end
+})
+TabProtect:CreateToggle({
+    Name = "Anti Lag",
+    CurrentValue = false,
+    Callback = function(v) state.antilag = v end
 })
 
 -- Aba Extra
