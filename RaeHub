@@ -1,9 +1,11 @@
--- Rael Hub
--- Feito para Delta Executor
--- Organizado em Abas: Movement, Visual, Protections, Target, Configurações
+-- Souls Hub (versão final única)
+-- Use no Delta Executor
+-- Abas: Movement (com Gravity+FOV), Visual (com Low GFX), Configurações
 
+-- carregar Rayfield (UI)
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
+-- services
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
@@ -11,96 +13,79 @@ local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 
--- Estado
+-- estado global
 local state = {
     infiniteJump = false,
-    fly = false,
-    flySpeed = 2,
-    walkspeedBoost = 16,
+    walkspeed = 16,
     noclip = false,
+    esp = false,
     fullbright = false,
-    target = nil,
-    gravity = Workspace.Gravity
+    gravity = Workspace.Gravity or 196.2,
+    -- Movement extras
+    fov = workspace.CurrentCamera and workspace.CurrentCamera.FieldOfView or 70,
+    -- Low GFX
+    lowgfx = false,
+    lowgfx_store = {}
 }
 
--- Função de notify
+-- notify wrapper (usa Rayfield se possível)
 local function notify(msg)
-    Rayfield:Notify({Title="Rael Hub", Content=msg, Duration=3})
-end
-
--- Função copiar avatar
-local function copyAvatar(target)
-    if target and target.Character and target.Character:FindFirstChild("HumanoidDescription") then
-        local desc = target.Character.Humanoid:FindFirstChildOfClass("HumanoidDescription")
-        if desc then
-            game.Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15).Parent = workspace
+    pcall(function()
+        if Rayfield and Rayfield.Notify then
+            Rayfield:Notify({ Title = "Souls Hub", Content = tostring(msg), Duration = 3 })
+        else
+            pcall(function()
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "Souls Hub",
+                    Text = tostring(msg),
+                    Duration = 3
+                })
+            end)
         end
-    end
+    end)
 end
 
--- Criação da Janela
+-- util: safe find humanoid
+local function getHumanoid(c)
+    if not c then return nil end
+    for _,v in pairs(c:GetChildren()) do
+        if v:IsA("Humanoid") then return v end
+    end
+    return nil
+end
+
+-- ================= Movement Tab (inclui Gravity e FOV) =================
 local Window = Rayfield:CreateWindow({
-    Name = "Rael Hub",
-    LoadingTitle = "Rael Hub",
-    LoadingSubtitle = "by Rael",
-    ConfigurationSaving = {Enabled = true, FolderName = nil, FileName = "RaelHubConfig"}
+    Name = "Souls Hub",
+    LoadingTitle = "Souls Hub",
+    LoadingSubtitle = "by Souls",
+    ConfigurationSaving = { Enabled = true, FolderName = nil, FileName = "SoulsHubConfig" }
 })
 
-----------------------------------------------------
--- MOVEMENT
-----------------------------------------------------
 local TabMovement = Window:CreateTab("Movement")
 
 -- Infinite Jump
 TabMovement:CreateToggle({
     Name = "Infinite Jump",
     CurrentValue = false,
-    Callback = function(val)
-        state.infiniteJump = val
-    end
+    Callback = function(v) state.infiniteJump = v notify("Infinite Jump "..(v and "ativado" or "desativado")) end
 })
 UserInputService.JumpRequest:Connect(function()
-    if state.infiniteJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
-    end
-end)
-
--- Fly
-TabMovement:CreateToggle({
-    Name = "Fly",
-    CurrentValue = false,
-    Callback = function(val)
-        state.fly = val
-    end
-})
-
--- Fly Speed
-TabMovement:CreateSlider({
-    Name = "Fly Speed",
-    Range = {1, 10},
-    Increment = 1,
-    CurrentValue = 2,
-    Callback = function(val)
-        state.flySpeed = val
-    end
-})
-
-RunService.RenderStepped:Connect(function()
-    if state.fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame = LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame + LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame.LookVector * state.flySpeed
+    if state.infiniteJump and LocalPlayer.Character and getHumanoid(LocalPlayer.Character) then
+        pcall(function() getHumanoid(LocalPlayer.Character):ChangeState("Jumping") end)
     end
 end)
 
 -- WalkSpeed Boost
 TabMovement:CreateSlider({
     Name = "WalkSpeed Boost",
-    Range = {16, 200},
+    Range = {16, 300},
     Increment = 1,
-    CurrentValue = 16,
-    Callback = function(val)
-        state.walkspeedBoost = val
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-            LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = val
+    CurrentValue = state.walkspeed,
+    Callback = function(v)
+        state.walkspeed = v
+        if LocalPlayer.Character and getHumanoid(LocalPlayer.Character) then
+            pcall(function() getHumanoid(LocalPlayer.Character).WalkSpeed = v end)
         end
     end
 })
@@ -109,182 +94,217 @@ TabMovement:CreateSlider({
 TabMovement:CreateToggle({
     Name = "Noclip",
     CurrentValue = false,
-    Callback = function(val)
-        state.noclip = val
-    end
+    Callback = function(v) state.noclip = v notify("Noclip "..(v and "ativado" or "desativado")) end
 })
 RunService.Stepped:Connect(function()
     if state.noclip and LocalPlayer.Character then
-        for _,part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then
-                part.CanCollide = false
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                pcall(function() part.CanCollide = false end)
             end
         end
     end
 end)
 
-----------------------------------------------------
--- VISUAL
-----------------------------------------------------
+-- Gravity slider + reset
+TabMovement:CreateSlider({
+    Name = "Gravity",
+    Range = {0, 500},
+    Increment = 1,
+    CurrentValue = state.gravity,
+    Callback = function(v)
+        state.gravity = v
+        pcall(function() Workspace.Gravity = v end)
+    end
+})
+TabMovement:CreateButton({
+    Name = "Reset Gravity",
+    Callback = function()
+        state.gravity = (Workspace and Workspace.Gravity) or 196.2
+        pcall(function() Workspace.Gravity = state.gravity end)
+        notify("Gravidade resetada para "..tostring(state.gravity))
+    end
+})
+
+-- FOV slider
+TabMovement:CreateSlider({
+    Name = "FOV",
+    Range = {35, 120},
+    Increment = 1,
+    CurrentValue = state.fov,
+    Callback = function(v)
+        state.fov = v
+        pcall(function() if workspace.CurrentCamera then workspace.CurrentCamera.FieldOfView = v end end)
+    end
+})
+
+-- ================= Visual Tab =================
 local TabVisual = Window:CreateTab("Visual")
 
--- ESP Players (Corrigido)
+-- ESP (Highlight)
 local espEnabled = false
-local espConnections = {}
-
-local function createESP(player)
-    if player == LocalPlayer then return end
-    if player.Character and not player.Character:FindFirstChild("RaelESP") then
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "RaelESP"
-        highlight.FillTransparency = 0.5
-        highlight.OutlineTransparency = 0
-        highlight.FillColor = Color3.fromRGB(0, 255, 0)
-        highlight.Parent = player.Character
-    end
-end
-
-local function removeESP(player)
-    if player.Character and player.Character:FindFirstChild("RaelESP") then
-        player.Character:FindFirstChild("RaelESP"):Destroy()
-    end
-end
-
-local function enableESP()
-    espEnabled = true
-    -- aplicar ESP em todos os players
-    for _,p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            createESP(p)
+local espConns = {}
+local function createESP(p)
+    if not p or p == LocalPlayer then return end
+    pcall(function()
+        if p.Character and not p.Character:FindFirstChild("SoulsESP") then
+            local h = Instance.new("Highlight")
+            h.Name = "SoulsESP"
+            h.FillTransparency = 0.5
+            h.OutlineTransparency = 0
+            h.FillColor = Color3.fromRGB(0,255,0)
+            h.Parent = p.Character
         end
-    end
-    -- se entrarem novos players
-    espConnections["PlayerAdded"] = Players.PlayerAdded:Connect(function(p)
-        p.CharacterAdded:Connect(function()
-            task.wait(1)
-            if espEnabled then
-                createESP(p)
-            end
-        end)
     end)
-    -- atualizar quando o player respawnar
-    for _,p in pairs(Players:GetPlayers()) do
-        espConnections[p.Name.."Char"] = p.CharacterAdded:Connect(function()
-            task.wait(1)
-            if espEnabled then
-                createESP(p)
-            end
-        end)
+end
+local function removeESP(p)
+    pcall(function()
+        if p and p.Character and p.Character:FindFirstChild("SoulsESP") then
+            p.Character:FindFirstChild("SoulsESP"):Destroy()
+        end
+    end)
+end
+local function enableESP()
+    if espEnabled then return end
+    espEnabled = true
+    for _, p in pairs(Players:GetPlayers()) do createESP(p) end
+    espConns.PlayerAdded = Players.PlayerAdded:Connect(function(pl)
+        espConns[pl.Name.."Char"] = pl.CharacterAdded:Connect(function() task.wait(0.5) if espEnabled then createESP(pl) end end)
+    end)
+    for _, p in pairs(Players:GetPlayers()) do
+        espConns[p.Name.."Char"] = p.CharacterAdded:Connect(function() task.wait(0.5) if espEnabled then createESP(p) end end)
     end
 end
-
 local function disableESP()
+    if not espEnabled then return end
     espEnabled = false
-    for _,p in pairs(Players:GetPlayers()) do
-        removeESP(p)
-    end
-    for _,con in pairs(espConnections) do
-        con:Disconnect()
-    end
-    espConnections = {}
+    for _, p in pairs(Players:GetPlayers()) do removeESP(p) end
+    for k,con in pairs(espConns) do pcall(function() con:Disconnect() end) end
+    espConns = {}
 end
 
--- Botão no menu
 TabVisual:CreateToggle({
     Name = "ESP Players",
     CurrentValue = false,
-    Callback = function(val)
-        if val then
-            enableESP()
-            notify("ESP Ativado")
-        else
-            disableESP()
-            notify("ESP Desativado")
-        end
+    Callback = function(v)
+        if v then enableESP() notify("ESP ativado") else disableESP() notify("ESP desativado") end
     end
 })
 
 -- FullBright
+local originalLighting = {
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime or 12,
+    GlobalShadows = Lighting.GlobalShadows,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    FogEnd = Lighting.FogEnd
+}
+local function setFullBright(on)
+    if on then
+        pcall(function()
+            Lighting.Brightness = 2
+            Lighting.ClockTime = 14
+            Lighting.FogEnd = 1e6
+            Lighting.GlobalShadows = false
+            Lighting.OutdoorAmbient = Color3.new(1,1,1)
+        end)
+    else
+        pcall(function()
+            Lighting.Brightness = originalLighting.Brightness
+            Lighting.ClockTime = originalLighting.ClockTime
+            Lighting.FogEnd = originalLighting.FogEnd
+            Lighting.GlobalShadows = originalLighting.GlobalShadows
+            Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+        end)
+    end
+end
 TabVisual:CreateToggle({
     Name = "FullBright",
     CurrentValue = false,
-    Callback = function(val)
-        state.fullbright = val
-        if val then
-            Lighting.Ambient = Color3.new(1,1,1)
-            Lighting.Brightness = 5
-            Lighting.FogEnd = 100000
-        else
-            Lighting.Ambient = Color3.new(0.5,0.5,0.5)
-            Lighting.Brightness = 2
-            Lighting.FogEnd = 1000
+    Callback = function(v) state.fullbright = v setFullBright(v) notify("FullBright "..(v and "ativado" or "desativado")) end
+})
+
+-- Low GFX (economia gráfica) - tenta desativar emissões/partículas e reduzir efeitos
+local function enableLowGFX()
+    if state.lowgfx then return end
+    state.lowgfx_store = { Lighting = {}, Particles = {} }
+    -- salvar e ajustar Lighting
+    pcall(function()
+        state.lowgfx_store.Lighting.Brightness = Lighting.Brightness
+        state.lowgfx_store.Lighting.GlobalShadows = Lighting.GlobalShadows
+        Lighting.Brightness = 0.7
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 1e6
+    end)
+    -- desativar ParticleEmitters, Trails, Sparks, Beams, Smoke, Fire
+    for _,obj in pairs(Workspace:GetDescendants()) do
+        pcall(function()
+            if obj:IsA("ParticleEmitter") then
+                state.lowgfx_store.Particles[obj] = {Class="ParticleEmitter", Enabled = obj.Enabled}
+                obj.Enabled = false
+            elseif obj:IsA("Trail") then
+                state.lowgfx_store.Particles[obj] = {Class="Trail", Enabled = obj.Enabled}
+                obj.Enabled = false
+            elseif obj:IsA("Sparkles") then
+                state.lowgfx_store.Particles[obj] = {Class="Sparkles", Enabled = obj.Enabled}
+                obj.Enabled = false
+            elseif obj:IsA("Beam") then
+                state.lowgfx_store.Particles[obj] = {Class="Beam", Enabled = obj.Enabled}
+                obj.Enabled = false
+            elseif obj:IsA("Smoke") then
+                state.lowgfx_store.Particles[obj] = {Class="Smoke", Enabled = obj.Enabled}
+                obj.Enabled = false
+            elseif obj:IsA("Fire") then
+                state.lowgfx_store.Particles[obj] = {Class="Fire", Enabled = obj.Enabled}
+                obj.Enabled = false
+            end
+        end)
+    end
+    state.lowgfx = true
+    notify("Low GFX ativado")
+end
+
+local function disableLowGFX()
+    if not state.lowgfx then return end
+    -- restaurar Lighting
+    pcall(function()
+        if state.lowgfx_store.Lighting then
+            Lighting.Brightness = state.lowgfx_store.Lighting.Brightness or Lighting.Brightness
+            Lighting.GlobalShadows = state.lowgfx_store.Lighting.GlobalShadows or Lighting.GlobalShadows
+            Lighting.FogEnd = originalLighting.FogEnd or Lighting.FogEnd
         end
+    end)
+    -- tentar reativar partículas (onde possível)
+    for obj,info in pairs(state.lowgfx_store.Particles or {}) do
+        pcall(function() if obj and obj.Parent then obj.Enabled = info.Enabled end end)
+    end
+    state.lowgfx_store = {}
+    state.lowgfx = false
+    notify("Low GFX desativado")
+end
+
+TabVisual:CreateToggle({
+    Name = "Low GFX",
+    CurrentValue = false,
+    Callback = function(v)
+        if v then enableLowGFX() else disableLowGFX() end
     end
 })
 
-----------------------------------------------------
--- PROTECTIONS
-----------------------------------------------------
-local TabProt = Window:CreateTab("Protections")
-
-TabProt:CreateToggle({Name="Anti-Sit v1",CurrentValue=false,Callback=function(v) notify("Anti-Sit v1 "..(v and "on" or "off")) end})
-TabProt:CreateToggle({Name="Anti-Sit v2",CurrentValue=false,Callback=function(v) notify("Anti-Sit v2 "..(v and "on" or "off")) end})
-TabProt:CreateToggle({Name="Anti-Hack",CurrentValue=false,Callback=function(v) notify("Anti-Hack "..(v and "on" or "off")) end})
-TabProt:CreateToggle({Name="Anti-Collision",CurrentValue=false,Callback=function(v) notify("Anti-Collision "..(v and "on" or "off")) end})
-TabProt:CreateToggle({Name="Anti-Void",CurrentValue=false,Callback=function(v) notify("Anti-Void "..(v and "on" or "off")) end})
-TabProt:CreateToggle({Name="Anti-Audio All",CurrentValue=false,Callback=function(v) notify("Anti-Audio "..(v and "on" or "off")) end})
-TabProt:CreateToggle({Name="Anti-Lag",CurrentValue=false,Callback=function(v) notify("Anti-Lag "..(v and "on" or "off")) end})
-
--- Gravity
-TabProt:CreateSlider({
-    Name = "Gravity",
-    Range = {0, 500},
-    Increment = 10,
-    CurrentValue = Workspace.Gravity,
-    Callback = function(val)
-        Workspace.Gravity = val
-    end
-})
-
-TabProt:CreateButton({
-    Name = "Reset Gravity",
-    Callback = function()
-        Workspace.Gravity = state.gravity
-        notify("Gravidade resetada")
-    end
-})
-
--- Teleport Target
-TabTarget:CreateButton({
-    Name = "Teleport para Alvo",
-    Callback = function()
-        if state.target and state.target.Character and state.target.Character:FindFirstChild("HumanoidRootPart") then
-            LocalPlayer.Character:PivotTo(state.target.Character.HumanoidRootPart.CFrame + Vector3.new(2,0,2))
-        end
-    end
-})
-
--- Copy Avatar
-TabTarget:CreateButton({
-    Name = "Copy Avatar",
-    Callback = function()
-        if state.target then 
-            copyAvatar(state.target)
-            notify("Avatar copiado de "..state.target.Name)
-        end
-    end
-})
-
-----------------------------------------------------
--- CONFIGURAÇÕES
-----------------------------------------------------
+-- ================= Config Tab =================
 local TabConfig = Window:CreateTab("Configurações")
-
--- Notificações
 TabConfig:CreateToggle({
     Name = "Notify (Notificações)",
     CurrentValue = true,
-    Callback = function(v)
-        notify("Notificações "..(v and "Ativadas" or "Desativadas"))
-    end
+    Callback = function(v) notify("Notificações "..(v and "Ativadas" or "Desativadas")) end
 })
+
+-- anti-afk (desativa conexões de idled quando possível)
+pcall(function()
+    for _,c in pairs(getconnections(LocalPlayer.Idled or function() end)) do
+        pcall(function() c:Disable() end)
+    end
+end)
+
+-- finalize
+notify("Souls Hub carregado — Movement (com Gravity+FOV) e Visual (Low GFX) prontos")
